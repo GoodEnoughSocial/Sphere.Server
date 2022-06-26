@@ -17,10 +17,10 @@ Console.CancelKeyPress += (o, e) =>
     e.Cancel = true;
 };
 
-Log.Logger = SphericalLogger.GetLoggerConfiguration().CreateLogger();//.CreateBootstrapLogger();
+// Setting this allows us to get some benefits all over the place.
+Services.Current = Services.Server;
 
-Log.Information("Starting up");
-AgentServiceRegistration? registration = null;
+Log.Logger = SphericalLogger.StartupLogger(Services.Current);
 
 try
 {
@@ -56,10 +56,6 @@ try
     var client = host.Services.GetRequiredService<IGrainFactory>();
 
     await RegisterServices(host, client);
-    var serverGrain = await client.GetGrain<IServiceDiscovery>(Services.Server).GetServiceDefinition();
-    registration = serverGrain.GetServiceRegistration();
-
-    var result = await Services.RegisterService(registration);
 
     Console.WriteLine("Press any key to exit.");
     Console.ReadLine();
@@ -75,11 +71,6 @@ catch (Exception ex)
 }
 finally
 {
-    if (registration is not null)
-    {
-        await Services.UnregisterService(registration);
-    }
-
     Log.Information("Shutting down");
     Log.CloseAndFlush();
 }
