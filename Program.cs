@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Orleans;
 using Orleans.Hosting;
@@ -11,6 +12,8 @@ using Microsoft.Extensions.Options;
 using System.Collections.Generic;
 using Consul;
 using Orleans.Statistics;
+using Sphere.Shared.Models;
+
 
 Console.CancelKeyPress += (o, e) =>
 {
@@ -33,8 +36,37 @@ try
             sc.Configure<MainOptions>(context.Configuration);
             sc.AddOptions();
         })
-        .UseOrleans(siloBuilder =>
+        .UseOrleans((context, siloBuilder) =>
         {
+            var invariant = "System.Data.SqlClient";
+
+            siloBuilder.UseAdoNetClustering(options =>
+            {
+                options.Invariant = invariant;
+                options.ConnectionString = context.Configuration.GetConnectionString(nameof(MainOptions.ConnectionStrings.Orleans));
+            });
+            
+            // Use ADO.NET for reminder service
+            siloBuilder.UseAdoNetReminderService(options =>
+            {
+                options.Invariant = invariant;
+                options.ConnectionString = context.Configuration.GetConnectionString(nameof(MainOptions.ConnectionStrings.Orleans));
+            });
+
+            siloBuilder.AddAdoNetGrainStorage("accountStore", options =>
+            {
+                options.Invariant = invariant;
+                options.ConnectionString = context.Configuration.GetConnectionString(nameof(MainOptions.ConnectionStrings.AccountStore));
+                options.UseJsonFormat = true;
+            });
+            
+            siloBuilder.AddAdoNetGrainStorage("profileStore", options =>
+            {
+                options.Invariant = invariant;
+                options.ConnectionString = context.Configuration.GetConnectionString(nameof(MainOptions.ConnectionStrings.ProfileStore));
+                options.UseJsonFormat = true;
+            });
+
             siloBuilder.ConfigureLogging(l => l.AddSerilog(Log.Logger));
             siloBuilder.UseLocalhostClustering();
             siloBuilder.AddMemoryGrainStorageAsDefault();
@@ -43,7 +75,9 @@ try
 
             siloBuilder.ConfigureApplicationParts(parts => parts
                 .AddApplicationPart(typeof(IServiceDiscovery).Assembly)
-                .AddApplicationPart(typeof(ServiceDiscoveryGrain).Assembly));
+                .AddApplicationPart(typeof(ServiceDiscoveryGrain).Assembly)
+                .AddApplicationPart(typeof(AccountState).Assembly));
+
             siloBuilder.UseDashboard(options =>
             {
                 options.Port = 9000;
